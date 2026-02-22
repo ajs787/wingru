@@ -2,204 +2,359 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Copy, RefreshCw, UserX, Clock, Settings2, ArrowLeft } from 'lucide-react';
+import { useDropzone } from 'react-dropzone';
+import { ArrowLeft, Upload, X, GripVertical, Check, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
-export default function SettingsPage() {
-  const { toast } = useToast();
-  const [invite, setInvite] = useState(null);
-  const [generating, setGenerating] = useState(false);
-  const [delegates, setDelegates] = useState([]);
-  const [revoking, setRevoking] = useState(null);
+const YEARS = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'Other'];
+const GENDERS = ['Man', 'Woman', 'Non-binary', 'Prefer not to say', 'Other'];
+const LOOKING_FOR = ['Men', 'Women', 'Everyone', 'Non-binary people'];
+const PERSONALITY_OPTIONS = [
+  'Early bird 🌅',
+  'Night owl 🦉',
+  'Introvert 🏡',
+  'Extrovert 🎉',
+  'Ambivert ⚖️',
+];
+const SAMPLE_PROMPTS = [
+  "My go-to stress reliever...",
+  "The way to my heart is...",
+  "We'll get along if...",
+  "My most controversial opinion...",
+  "I'm secretly really good at...",
+];
 
+function getCurrentNetid() {
+  try {
+    const u = JSON.parse(localStorage.getItem('wingru_current_user') || '{}');
+    return u.netid || 'default';
+  } catch { return 'default'; }
+}
+
+function PhotoSlot({ index, photo, onUpload, onRemove }) {
+  const onDrop = useCallback((files) => {
+    if (files[0]) onUpload(index, files[0]);
+  }, [index, onUpload]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'image/*': [] },
+    maxFiles: 1,
+    maxSize: 10 * 1024 * 1024,
+    disabled: !!photo,
+  });
+
+  return (
+    <div
+      {...(photo ? {} : getRootProps())}
+      className={`relative aspect-[3/4] rounded-2xl border-2 overflow-hidden transition-all cursor-pointer
+        ${photo ? 'border-transparent' : isDragActive ? 'border-rose-400 bg-rose-50' : 'border-dashed border-slate-200 bg-slate-50 hover:border-rose-300 hover:bg-rose-50/30'}`}
+    >
+      {!photo && <input {...getInputProps()} />}
+      {photo ? (
+        <>
+          <img src={photo.dataUrl} alt={`Photo ${index + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(index); }}
+            className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+          >
+            <X className="w-3 h-3" />
+          </button>
+          <div className="absolute bottom-2 left-2 text-white text-xs font-semibold">
+            {index === 0 ? 'Main' : `${index + 1}`}
+          </div>
+        </>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+          <Upload className="w-5 h-5 mb-1" />
+          <span className="text-xs font-medium">{index === 0 ? 'Main' : `${index + 1}`}</span>
+        </div>
+      )}
+      {photo && (
+        <div className="absolute top-2 left-2 w-6 h-6 bg-white/80 rounded-full flex items-center justify-center">
+          <GripVertical className="w-3 h-3 text-slate-500" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SettingsPage() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+
+  // Basic info
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [year, setYear] = useState('');
+  const [major, setMajor] = useState('');
+  const [gender, setGender] = useState('');
+  const [lookingFor, setLookingFor] = useState('');
+  const [personalityAnswer, setPersonalityAnswer] = useState('');
+
+  // Photos
+  const [photos, setPhotos] = useState(Array(5).fill(null));
+
+  // Prompts
+  const [prompts, setPrompts] = useState([
+    { prompt: '', answer: '' },
+    { prompt: '', answer: '' },
+  ]);
+
+  // Load from localStorage on mount
   useEffect(() => {
-    loadDelegates();
+    try {
+      const netid = getCurrentNetid();
+      const savedProfile = JSON.parse(localStorage.getItem(`wingru_profile_${netid}`) || 'null');
+      if (savedProfile) {
+        if (savedProfile.name) setName(savedProfile.name);
+        if (savedProfile.age) setAge(String(savedProfile.age));
+        if (savedProfile.year) setYear(savedProfile.year);
+        if (savedProfile.major) setMajor(savedProfile.major);
+        if (savedProfile.gender) setGender(savedProfile.gender);
+        if (savedProfile.looking_for) setLookingFor(savedProfile.looking_for);
+        if (savedProfile.personality_answer) setPersonalityAnswer(savedProfile.personality_answer);
+        if (savedProfile.prompts?.length) setPrompts(savedProfile.prompts);
+      }
+
+      const savedPhotos = JSON.parse(localStorage.getItem(`wingru_photos_${netid}`) || 'null');
+      if (Array.isArray(savedPhotos)) {
+        setPhotos(savedPhotos.map((d) => d ? { dataUrl: d } : null));
+      }
+    } catch {}
   }, []);
 
-  async function loadDelegates() {
-    try {
-      const res = await fetch('/api/delegations');
-      if (!res.ok) return;
-      const { delegates: d } = await res.json();
-      setDelegates(d ?? []);
-    } catch {}
-  }
-
-  async function generateInvite() {
-    setGenerating(true);
-    try {
-      const res = await fetch('/api/invite/create', { method: 'POST' });
-      if (!res.ok) {
-        const { error } = await res.json();
-        toast({ title: 'Error', description: error, variant: 'destructive' });
-        return;
-      }
-      const { invite: inv } = await res.json();
-      setInvite(inv);
-      toast({ title: 'Invite code generated!', description: 'Share it with your wingman. It expires in 10 minutes.' });
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function copyCode() {
-    if (!invite?.code) return;
-    await navigator.clipboard.writeText(invite.code);
-    toast({ title: 'Copied!', description: `Code ${invite.code} copied to clipboard.` });
-  }
-
-  async function revokeDelegate(delegationId) {
-    setRevoking(delegationId);
-    try {
-      const res = await fetch('/api/delegations', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delegation_id: delegationId }),
+  function handlePhotoUpload(index, file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      setPhotos((prev) => {
+        const next = [...prev];
+        next[index] = { dataUrl };
+        return next;
       });
-      if (!res.ok) {
-        const { error } = await res.json();
-        toast({ title: 'Error', description: error, variant: 'destructive' });
-        return;
-      }
-      setDelegates((d) => d.filter((del) => del.id !== delegationId));
-      toast({ title: 'Delegate removed', description: 'They can no longer swipe for you.' });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handlePhotoRemove(index) {
+    setPhotos((prev) => {
+      const next = [...prev];
+      next[index] = null;
+      return next;
+    });
+  }
+
+  function handleSave() {
+    setSaving(true);
+    try {
+      const netid = getCurrentNetid();
+      const profile = {
+        name: name.trim(),
+        age: parseInt(age) || 0,
+        year,
+        major: major.trim(),
+        gender,
+        looking_for: lookingFor,
+        personality_answer: personalityAnswer,
+        prompts,
+      };
+      localStorage.setItem(`wingru_profile_${netid}`, JSON.stringify(profile));
+      localStorage.setItem(
+        `wingru_photos_${netid}`,
+        JSON.stringify(photos.map((p) => p ? p.dataUrl : null))
+      );
+      toast({ title: 'Profile saved!', description: 'Your changes have been saved.' });
+    } catch {
+      toast({ title: 'Error', description: 'Could not save profile.', variant: 'destructive' });
     } finally {
-      setRevoking(null);
+      setSaving(false);
     }
   }
 
-  function expiresIn(isoStr) {
-    const diff = new Date(isoStr) - new Date();
-    if (diff <= 0) return 'Expired';
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return `${mins}m ${secs}s`;
-  }
-
-  const [countdown, setCountdown] = useState('');
-  useEffect(() => {
-    if (!invite) return;
-    const interval = setInterval(() => {
-      setCountdown(expiresIn(invite.expires_at));
-    }, 1000);
-    setCountdown(expiresIn(invite.expires_at));
-    return () => clearInterval(interval);
-  }, [invite]);
+  const photoCount = photos.filter(Boolean).length;
 
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="border-b border-slate-100 px-6 py-5">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <Link href="/feed">
-            <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Settings</h1>
-            <p className="text-sm text-slate-500">Manage your wingmen</p>
+      <div className="border-b border-slate-100 px-6 py-5 sticky top-0 bg-white z-10">
+        <div className="max-w-lg mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/feed">
+              <Button variant="ghost" size="icon"><ArrowLeft className="w-4 h-4" /></Button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">My Profile</h1>
+              <p className="text-xs text-slate-400">Edit your info, photos &amp; prompts</p>
+            </div>
           </div>
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-6 py-8 space-y-10 animate-fade-in">
-        {/* Generate invite code */}
+      <div className="max-w-lg mx-auto px-6 py-8 space-y-10">
+
+        {/* Photos */}
         <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center">
-              <Settings2 className="w-4 h-4 text-rose-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-slate-800">Invite a wingman</h2>
+          <h2 className="text-base font-semibold text-slate-800 mb-1">Photos</h2>
+          <p className="text-xs text-slate-400 mb-4">{photoCount}/5 uploaded</p>
+          <div className="grid grid-cols-3 gap-3">
+            {photos.map((photo, i) => (
+              <PhotoSlot key={i} index={i} photo={photo} onUpload={handlePhotoUpload} onRemove={handlePhotoRemove} />
+            ))}
           </div>
-          <p className="text-sm text-slate-500 mb-5">
-            Generate a one-time invite code and share it with a friend. They&apos;ll use it at{' '}
-            <span className="font-medium text-rose-500">/delegate</span> to start swiping for you.
-          </p>
-
-          {invite && countdown !== 'Expired' ? (
-            <div className="border-2 border-rose-100 rounded-2xl p-5 bg-rose-50/30">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-slate-500 font-medium">Your invite code</span>
-                <span className="flex items-center gap-1 text-xs text-slate-400">
-                  <Clock className="w-3 h-3" />
-                  {countdown}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-3xl font-mono font-bold tracking-widest text-rose-600">
-                  {invite.code}
-                </span>
-                <Button variant="ghost" size="icon" onClick={copyCode}>
-                  <Copy className="w-4 h-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-slate-400 mt-3">One-time use · Expires in ~10 minutes</p>
-            </div>
-          ) : (
-            <Button onClick={generateInvite} disabled={generating} className="gap-2">
-              {generating ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Generate invite code
-            </Button>
-          )}
-
-          {invite && countdown === 'Expired' && (
-            <div className="mt-3">
-              <p className="text-sm text-slate-400 mb-2">Code expired.</p>
-              <Button onClick={generateInvite} disabled={generating} variant="outline" className="gap-2">
-                <RefreshCw className="w-4 h-4" /> Generate new code
-              </Button>
-            </div>
-          )}
         </section>
 
-        {/* Active delegates */}
-        <section>
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">
-            Active wingmen
-            {delegates.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-slate-400">({delegates.length})</span>
-            )}
-          </h2>
+        <hr className="border-slate-100" />
 
-          {delegates.length === 0 ? (
-            <div className="text-center py-10 rounded-2xl bg-slate-50 border border-dashed border-slate-200">
-              <p className="text-slate-400 text-sm">No active wingmen yet.</p>
-              <p className="text-slate-400 text-xs mt-1">Generate a code to invite your first one.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {delegates.map((d) => (
-                <div
-                  key={d.id}
-                  className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 bg-white hover:border-slate-200 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium text-slate-800">
-                      {d.profiles?.name || `@${d.profiles?.netid}`}
-                    </p>
-                    <p className="text-xs text-slate-400">@{d.profiles?.netid}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => revokeDelegate(d.id)}
-                    disabled={revoking === d.id}
-                    className="text-red-500 hover:text-red-600 hover:bg-red-50 gap-1"
-                  >
-                    <UserX className="w-4 h-4" />
-                    {revoking === d.id ? 'Removing...' : 'Remove'}
-                  </Button>
-                </div>
+        {/* Basic info */}
+        <section className="space-y-4">
+          <h2 className="text-base font-semibold text-slate-800">Basic info</h2>
+
+          <div>
+            <Label htmlFor="name">Full name</Label>
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="mt-1" autoComplete="off" />
+          </div>
+          <div>
+            <Label htmlFor="age">Age</Label>
+            <Input id="age" type="number" min="17" max="99" value={age} onChange={(e) => setAge(e.target.value)} placeholder="21" className="mt-1 w-28" autoComplete="off" />
+          </div>
+          <div>
+            <Label>Year at Rutgers</Label>
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Select year" /></SelectTrigger>
+              <SelectContent>
+                {YEARS.map((y) => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="major">Major</Label>
+            <Input id="major" value={major} onChange={(e) => setMajor(e.target.value)} placeholder="Computer Science" className="mt-1" autoComplete="off" />
+          </div>
+        </section>
+
+        <hr className="border-slate-100" />
+
+        {/* Gender & preferences */}
+        <section className="space-y-4">
+          <h2 className="text-base font-semibold text-slate-800">Preferences</h2>
+          <div>
+            <Label className="mb-2 block">Gender</Label>
+            <div className="flex flex-wrap gap-2">
+              {GENDERS.map((g) => (
+                <button key={g} type="button" onClick={() => setGender(g)}
+                  className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${gender === g ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-200 text-slate-600 hover:border-rose-300'}`}>
+                  {g}
+                </button>
               ))}
             </div>
-          )}
+          </div>
+          <div>
+            <Label className="mb-2 block">Looking for</Label>
+            <div className="flex flex-wrap gap-2">
+              {LOOKING_FOR.map((l) => (
+                <button key={l} type="button" onClick={() => setLookingFor(l)}
+                  className={`px-4 py-2 rounded-xl border text-sm font-medium transition-colors ${lookingFor === l ? 'bg-rose-500 text-white border-rose-500' : 'border-slate-200 text-slate-600 hover:border-rose-300'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
+
+        <hr className="border-slate-100" />
+
+        {/* Vibe */}
+        <section>
+          <h2 className="text-base font-semibold text-slate-800 mb-4">Your vibe</h2>
+          <div className="space-y-2">
+            {PERSONALITY_OPTIONS.map((opt) => (
+              <button key={opt} type="button" onClick={() => setPersonalityAnswer(opt)}
+                className={`w-full text-left px-5 py-3.5 rounded-2xl border-2 text-sm font-medium transition-all ${personalityAnswer === opt ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-100 text-slate-700 hover:border-slate-200 bg-white'}`}>
+                <div className="flex items-center justify-between">
+                  {opt}
+                  {personalityAnswer === opt && <Check className="w-4 h-4 text-rose-500" />}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <hr className="border-slate-100" />
+
+        {/* Prompts */}
+        <section>
+          <h2 className="text-base font-semibold text-slate-800 mb-1">Prompts</h2>
+          <p className="text-xs text-slate-400 mb-4">Answer at least 2 — these show on your profile.</p>
+          <div className="space-y-4">
+            {prompts.map((ps, i) => (
+              <div key={i} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-slate-500 uppercase tracking-wide">Prompt {i + 1}</Label>
+                  {prompts.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setPrompts(prompts.filter((_, idx) => idx !== i))}
+                      className="text-slate-300 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <Select value={ps.prompt} onValueChange={(v) => {
+                  const next = [...prompts]; next[i] = { ...next[i], prompt: v }; setPrompts(next);
+                }}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="Pick a prompt..." /></SelectTrigger>
+                  <SelectContent>
+                    {SAMPLE_PROMPTS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {ps.prompt && (
+                  <textarea
+                    value={ps.answer}
+                    onChange={(e) => {
+                      const next = [...prompts]; next[i] = { ...next[i], answer: e.target.value }; setPrompts(next);
+                    }}
+                    placeholder="Your answer..."
+                    maxLength={300}
+                    rows={2}
+                    className="w-full rounded-xl border border-input bg-white px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                )}
+              </div>
+            ))}
+            {prompts.length < 5 && (
+              <button
+                type="button"
+                onClick={() => setPrompts([...prompts, { prompt: '', answer: '' }])}
+                className="flex items-center gap-2 text-sm text-rose-500 hover:underline"
+              >
+                <Plus className="w-4 h-4" /> Add another prompt
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* Bottom save */}
+        <div className="pb-8">
+          <Button onClick={handleSave} disabled={saving} size="lg" className="w-full">
+            {saving ? 'Saving...' : 'Save profile'}
+          </Button>
+        </div>
+
       </div>
     </div>
   );

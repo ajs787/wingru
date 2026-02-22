@@ -90,7 +90,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-8 border-t border-slate-100 text-center text-sm text-slate-400">
         <p>
-          WingRu — Built for Rutgers University.{' '}
+          WingRu Est. 2026 {' '}
           <span className="text-rose-400">♥</span>
         </p>
       </footer>

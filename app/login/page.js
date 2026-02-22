@@ -9,6 +9,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail } from 'lucide-react';
 
+// Pre-saved profiles — loaded automatically on first login for these accounts
+const PRESET_PROFILES = {
+  'ajs787': {
+    name: 'Audrey Shin',
+    age: 21,
+    year: 'Junior',
+    major: 'Computer Science',
+    gender: 'Woman',
+    looking_for: 'Men',
+    personality_answer: 'Night owl 🦉',
+    prompts: [
+      { prompt: "My go-to stress reliever...", answer: "matcha and sad playlists" },
+      { prompt: "We'll get along if...", answer: "you have strong opinions on where to eat" },
+    ],
+  },
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -33,7 +50,27 @@ export default function LoginPage() {
         setError(msg || 'Login failed');
         return;
       }
-      router.push('/onboarding');
+
+      const netid = trimmed.split('@')[0];
+
+      // Store current user so other pages can namespace their localStorage
+      localStorage.setItem('wingru_current_user', JSON.stringify({ email: trimmed, netid }));
+
+      const profileKey = `wingru_profile_${netid}`;
+      const existing = localStorage.getItem(profileKey);
+
+      if (!existing && PRESET_PROFILES[netid]) {
+        // First login for a preset account — populate the profile silently
+        localStorage.setItem(profileKey, JSON.stringify(PRESET_PROFILES[netid]));
+        router.push('/feed');
+      } else if (existing) {
+        const p = JSON.parse(existing);
+        // If they have a name, profile is complete — go to feed; else finish onboarding
+        router.push(p.name ? '/feed' : '/onboarding');
+      } else {
+        // Brand new user — clean slate onboarding
+        router.push('/onboarding');
+      }
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -57,7 +94,7 @@ export default function LoginPage() {
           Enter any email to get started
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -67,7 +104,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="off"
               className="h-12"
             />
           </div>

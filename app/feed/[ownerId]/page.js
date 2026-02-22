@@ -100,9 +100,22 @@ const CANDIDATES_BY_FRIEND = {
 function ProfileCard({ candidate, onPass, onLike }) {
   const [showTags, setShowTags] = useState(false);
   const [selectedTag, setSelectedTag] = useState('');
+  const [swipeDir, setSwipeDir] = useState(null); // 'like' | 'pass' | null
+
+  function handlePassPress() {
+    setSwipeDir('pass');
+    setTimeout(() => {
+      setSwipeDir(null);
+      onPass();
+    }, 500);
+  }
 
   function handleLikePress() {
-    setShowTags(true);
+    setSwipeDir('like');
+    setTimeout(() => {
+      setSwipeDir(null);
+      setShowTags(true);
+    }, 500);
   }
 
   function confirmLike() {
@@ -112,7 +125,43 @@ function ProfileCard({ candidate, onPass, onLike }) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
+      {/* Inline keyframe — always in scope regardless of CSS load order */}
+      <style>{`
+        @keyframes stampPop {
+          0%   { opacity: 0; transform: scale(0.35); }
+          60%  { opacity: 1; transform: scale(1.15); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+
+      {/* Full-card stamp overlay */}
+      {swipeDir && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none rounded-3xl"
+          style={{ animation: 'stampPop 0.35s ease-out both' }}
+        >
+          <div
+            style={{ transform: `rotate(${swipeDir === 'like' ? '-12deg' : '12deg'})` }}
+            className={`rounded-2xl px-8 py-4 flex items-center gap-3 border-[5px] ${
+              swipeDir === 'like' ? 'border-green-400' : 'border-red-400'
+            }`}
+          >
+            {swipeDir === 'like' ? (
+              <>
+                <Heart className="w-10 h-10 text-green-400 fill-green-400" />
+                <span className="text-green-400 text-4xl font-black italic tracking-widest">LIKE</span>
+              </>
+            ) : (
+              <>
+                <X className="w-10 h-10 text-red-400" strokeWidth={3} />
+                <span className="text-red-400 text-4xl font-black italic tracking-widest">NOPE</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Scrollable card content */}
       <div className="flex-1 overflow-y-auto space-y-3 pb-2">
         {/* Photo 1 + name overlay */}
@@ -200,14 +249,16 @@ function ProfileCard({ candidate, onPass, onLike }) {
       {!showTags && (
         <div className="flex items-center justify-center gap-6 mt-4 pb-2">
           <button
-            onClick={onPass}
-            className="w-16 h-16 rounded-full border-2 border-slate-200 flex items-center justify-center hover:border-red-300 hover:bg-red-50 transition-all group shadow-sm"
+            onClick={handlePassPress}
+            disabled={!!swipeDir}
+            className="w-16 h-16 rounded-full border-2 border-slate-200 flex items-center justify-center hover:border-red-300 hover:bg-red-50 transition-all group shadow-sm disabled:opacity-50"
           >
             <X className="w-7 h-7 text-slate-400 group-hover:text-red-400" />
           </button>
           <button
             onClick={handleLikePress}
-            className="w-16 h-16 rounded-full border-2 border-rose-200 flex items-center justify-center hover:border-rose-400 hover:bg-rose-50 transition-all group shadow-sm"
+            disabled={!!swipeDir}
+            className="w-16 h-16 rounded-full border-2 border-rose-200 flex items-center justify-center hover:border-rose-400 hover:bg-rose-50 transition-all group shadow-sm disabled:opacity-50"
           >
             <Heart className="w-7 h-7 text-rose-400 group-hover:text-rose-500" />
           </button>
@@ -229,7 +280,9 @@ export default function OwnerFeedPage() {
 
   useEffect(() => {
     try {
-      const delegations = JSON.parse(localStorage.getItem('wingru_delegations') || '[]');
+      const u = JSON.parse(localStorage.getItem('wingru_current_user') || '{}');
+      const netid = u.netid || 'default';
+      const delegations = JSON.parse(localStorage.getItem(`wingru_delegations_${netid}`) || '[]');
       const friend = delegations.find((f) => f.id === ownerId);
       if (friend) setOwnerProfile(friend);
     } catch {}

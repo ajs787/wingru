@@ -55,13 +55,15 @@ export default function DelegatePage() {
       return;
     }
 
-    // Save to localStorage
+    // Save to localStorage (per-user key)
     try {
-      const existing = JSON.parse(localStorage.getItem('wingru_delegations') || '[]');
+      const u = JSON.parse(localStorage.getItem('wingru_current_user') || '{}');
+      const netid = u.netid || 'default';
+      const existing = JSON.parse(localStorage.getItem(`wingru_delegations_${netid}`) || '[]');
       const alreadyAdded = existing.some((f) => f.id === friend.id);
       if (!alreadyAdded) {
         existing.push(friend);
-        localStorage.setItem('wingru_delegations', JSON.stringify(existing));
+        localStorage.setItem(`wingru_delegations_${netid}`, JSON.stringify(existing));
       }
     } catch {}
 

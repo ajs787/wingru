@@ -88,6 +88,13 @@ function PhotoSlot({ index, photo, onUpload, onRemove }) {
   );
 }
 
+function getCurrentNetid() {
+  try {
+    const u = JSON.parse(localStorage.getItem('wingru_current_user') || '{}');
+    return u.netid || 'default';
+  } catch { return 'default'; }
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -115,10 +122,11 @@ export default function OnboardingPage() {
     { prompt: '', answer: '' },
   ]);
 
-  // Load saved data from localStorage on mount
+  // Load saved data from localStorage on mount (per-user keys)
   useEffect(() => {
     try {
-      const savedProfile = localStorage.getItem('wingru_profile');
+      const netid = getCurrentNetid();
+      const savedProfile = localStorage.getItem(`wingru_profile_${netid}`);
       if (savedProfile) {
         const p = JSON.parse(savedProfile);
         if (p.name) setName(p.name);
@@ -131,7 +139,7 @@ export default function OnboardingPage() {
         if (p.prompts) setPromptSelections(p.prompts);
       }
 
-      const savedPhotos = localStorage.getItem('wingru_photos');
+      const savedPhotos = localStorage.getItem(`wingru_photos_${netid}`);
       if (savedPhotos) {
         const parsed = JSON.parse(savedPhotos);
         if (Array.isArray(parsed)) {
@@ -164,12 +172,10 @@ export default function OnboardingPage() {
       setPhotos((prev) => {
         const next = [...prev];
         next[index] = { dataUrl };
-        // Persist to localStorage
         try {
-          localStorage.setItem('wingru_photos', JSON.stringify(next.map((p) => p ? p.dataUrl : null)));
-        } catch {
-          // storage full or unavailable
-        }
+          const netid = getCurrentNetid();
+          localStorage.setItem(`wingru_photos_${netid}`, JSON.stringify(next.map((p) => p ? p.dataUrl : null)));
+        } catch {}
         return next;
       });
     };
@@ -181,13 +187,15 @@ export default function OnboardingPage() {
       const next = [...prev];
       next[index] = null;
       try {
-        localStorage.setItem('wingru_photos', JSON.stringify(next.map((p) => p ? p.dataUrl : null)));
+        const netid = getCurrentNetid();
+        localStorage.setItem(`wingru_photos_${netid}`, JSON.stringify(next.map((p) => p ? p.dataUrl : null)));
       } catch {}
       return next;
     });
   }
 
   function handleSaveProfile() {
+    const netid = getCurrentNetid();
     const profile = {
       name: name.trim(),
       age: parseInt(age),
@@ -199,7 +207,7 @@ export default function OnboardingPage() {
       prompts: promptSelections,
     };
     try {
-      localStorage.setItem('wingru_profile', JSON.stringify(profile));
+      localStorage.setItem(`wingru_profile_${netid}`, JSON.stringify(profile));
     } catch {}
     return true;
   }

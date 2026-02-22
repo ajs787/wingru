@@ -6,7 +6,14 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Users, Plus, Heart, ChevronRight } from 'lucide-react';
+import { Users, Plus, Heart, ChevronRight, UserCircle, Sparkles } from 'lucide-react';
+
+function getCurrentNetid() {
+  try {
+    const u = JSON.parse(localStorage.getItem('wingru_current_user') || '{}');
+    return u.netid || 'default';
+  } catch { return 'default'; }
+}
 
 export default function FeedPage() {
   const router = useRouter();
@@ -16,15 +23,17 @@ export default function FeedPage() {
 
   useEffect(() => {
     try {
-      const delegations = JSON.parse(localStorage.getItem('wingru_delegations') || '[]');
+      const netid = getCurrentNetid();
+      const delegations = JSON.parse(localStorage.getItem(`wingru_delegations_${netid}`) || '[]');
       setFriends(delegations);
-      const profile = JSON.parse(localStorage.getItem('wingru_profile') || 'null');
+      const profile = JSON.parse(localStorage.getItem(`wingru_profile_${netid}`) || 'null');
       setMyProfile(profile);
     } catch {}
     setLoading(false);
   }, []);
 
   function handleSignOut() {
+    localStorage.removeItem('wingru_current_user');
     fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
       router.push('/');
     });
@@ -36,9 +45,16 @@ export default function FeedPage() {
       <div className="border-b border-slate-100 px-6 py-5">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <span className="text-xl font-bold text-rose-500">WingRu</span>
-          <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-slate-500">
-            Sign out
-          </Button>
+          <div className="flex items-center gap-1">
+            <Link href="/settings">
+              <Button variant="ghost" size="icon" title="Edit profile">
+                <UserCircle className="w-5 h-5 text-slate-500" />
+              </Button>
+            </Link>
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-slate-500">
+              Sign out
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -50,6 +66,33 @@ export default function FeedPage() {
             <p className="text-slate-500 mt-1">Who are you swiping for today?</p>
           </div>
         )}
+
+        {/* My Matches */}
+        <section className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-4 h-4 text-rose-400" />
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">My Matches</h2>
+          </div>
+          <Link href="/matches">
+            <div className="flex items-center justify-between p-4 rounded-2xl border border-rose-100 bg-rose-50/30 hover:border-rose-300 hover:bg-rose-50/60 transition-all group cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="flex -space-x-3">
+                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                    <img src="/kevin1.jpg" alt="Kevin" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                    <img src="/fred1.jpg" alt="Fred" className="w-full h-full object-cover" />
+                  </div>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-800">2 new matches</p>
+                  <p className="text-xs text-slate-400">Kevin and Fred liked you back</p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-rose-300 group-hover:text-rose-500 transition-colors" />
+            </div>
+          </Link>
+        </section>
 
         {/* Who to swipe for */}
         <section className="mb-8">
